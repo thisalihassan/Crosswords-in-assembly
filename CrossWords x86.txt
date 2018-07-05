@@ -1,0 +1,1057 @@
+.386
+.model flat, stdcall
+.stack 4096
+
+ExitProcess proto, dwExitCode:dword
+
+GetStdHandle PROTO,         ; get standard handle
+    nStdHandle:DWORD        ; type of console handle
+
+GetTickCount PROTO      ; get elapsed milliseconds
+                        ; since computer turned on
+
+ReadConsoleA PROTO,
+    handle:DWORD,                     ; input handle
+    lpBuffer:PTR BYTE,                ; pointer to buffer
+    nNumberOfCharsToRead:DWORD,       ; number of chars to read
+    lpNumberOfCharsRead:PTR DWORD,    ; number of chars read
+    lpReserved:PTR DWORD              ; 0 (not used - reserved)
+
+WriteConsoleA PROTO,                   ; write a buffer to the console
+    handle:DWORD,                     ; output handle
+    lpBuffer:PTR BYTE,                ; pointer to buffer
+    nNumberOfCharsToWrite:DWORD,      ; size of buffer
+    lpNumberOfCharsWritten:PTR DWORD, ; number of chars written
+    lpReserved:PTR DWORD              ; 0 (not used)
+
+CreateFileA PROTO,           ; create new file
+    pFilename:PTR BYTE,     ; ptr to filename
+    accessMode:DWORD,       ; access mode
+    shareMode:DWORD,        ; share mode
+    lpSecurity:DWORD,       ; can be NULL
+    howToCreate:DWORD,      ; how to create the file
+    attributes:DWORD,       ; file attributes
+    htemplate:DWORD         ; handle to template file
+
+ReadFile PROTO,           ; read buffer from input file
+    fileHandle:DWORD,     ; handle to file
+    pBuffer:PTR BYTE,     ; ptr to buffer
+    nBufsize:DWORD,       ; number bytes to read
+    pBytesRead:PTR DWORD, ; bytes actually read
+    pOverlapped:PTR DWORD ; ptr to asynchronous info
+
+WriteFile PROTO,             ; write buffer to output file
+    fileHandle:DWORD,        ; output handle
+    pBuffer:PTR BYTE,        ; pointer to buffer
+    nBufsize:DWORD,          ; size of buffer
+    pBytesWritten:PTR DWORD, ; number of bytes written
+    pOverlapped:PTR DWORD    ; ptr to asynchronous info
+
+GetTimeFormatA PROTO :DWORD,:DWORD,:DWORD,:DWORD,:DWORD,:DWORD
+
+SetConsoleTextAttribute PROTO,     
+nStdHandle:DWORD,			  ; console output handle     
+nColor:DWORD				  ; color attribute 
+
+SetConsoleCursorPosition PROTO,     
+handle:DWORD,       
+pos:DWORD
+
+;====================================================.DATA==================================
+.data
+msg byte "               |Welcome To The Puzzle World|",0dh,0aH,"You have 10 minutes to complete the puzzle. Your Time started At: ",0
+Time byte 11 dup(?)
+timeformat byte "hh:mm:ss tt", 0
+msg2 byte 0dh,0ah,"Words to be found                                          Score:",0d,0ah
+Score dword 0
+bytescore byte 5 dup(?)
+abc byte "ABCDEFGHIJKLMNOPQRSTUVWXYZ",0
+Tblocks byte 871 dup(0)
+GxG dword 15
+seed dword ?
+x dword ?
+
+;Possible Directions
+dir1  byte "Possible Directions:"
+dir2 byte "       0"
+dir3 byte "       |"
+dir4 byte "       |"
+dir5 byte "5 ---- o ---- 1"
+dir6 byte "     / | \"
+dir7 byte "    /  |  \"
+dir8 byte "   4   3   2"
+
+
+;Read Word File
+filepath byte "C:\Users\Kalicifer\Downloads\wordsa.txt",0
+buffer byte 4600 dup(?)
+
+;Words Variables
+pickWords dword 8 dup(?)
+wordNo dword 8 dup(?)
+wholeWords byte 100 dup(?)
+
+;Var for Hiding Process
+TempWord byte 10 dup(?)
+Location dword ?
+
+;Var for FindingWords
+theWord byte 12 dup(?)
+rowNo byte ?
+colNo byte ?
+Direction byte ?
+char byte ?
+Msg3 byte "Please enter the word, row no, column no and direction no (e.g. dummyword 1 2 0):",0
+empspaces byte "                                                                    "
+startTime dword ? 
+endTime dword ?
+foundList byte 100 dup(?)
+offsetList dword 0
+Done? dword 0
+
+.code
+;====================================Main==================================
+main proc
+invoke GetTickCount
+mov seed, eax
+mov startTime, eax
+invoke GetTimeFormatA, 0800h, 0, 0, offset timeformat, offset Time , lengthof Time
+
+;-----------------------MSG1 Here
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 11
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset msg, lengthof msg, offset x, 0
+
+;-----------------------Time Here
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 12
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset Time, lengthof Time, offset x, 0
+
+;-----------------------MSG2 Here
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 10
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset msg2, lengthof msg2, offset x, 0
+
+;======================================================================================
+invoke CreateFileA, offset filepath, 1, 0, 0, 3, 128, 0
+invoke ReadFile, eax, offset buffer, lengthof buffer, offset x, 0
+invoke GetStdHandle, -11
+
+call buildGrid
+;======================================================================================
+
+;-----------------------Random Words Here
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 12
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset wholeWords, lengthof wholeWords, offset x, 0
+;======================================================================================
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 13										;-----Direction Color
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+call directions
+
+;======================================================================================
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 7
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+mov ebx, 12
+rol ebx, 16
+mov bx, 0
+invoke GetStdHandle, -11 
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset Tblocks, lengthof Tblocks, offset x, 0
+
+Call StartGame
+invoke Exitprocess, 0
+main endp
+
+;===================================Possible Directions=================================
+directions proc
+mov ebx, 3
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir1, lengthof dir1, offset x, 0
+
+mov ebx, 4
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir2, lengthof dir2, offset x, 0
+
+mov ebx, 5
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir3, lengthof dir3, offset x, 0
+
+mov ebx, 6
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir4, lengthof dir4, offset x, 0
+
+mov ebx, 7
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir5, lengthof dir5, offset x, 0
+
+mov ebx, 8
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir6, lengthof dir6, offset x, 0
+
+mov ebx, 9
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir7, lengthof dir7, offset x, 0
+
+mov ebx, 10
+rol ebx, 16
+mov bx, 32
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset dir8, lengthof dir8, offset x, 0
+
+ret
+directions endp
+
+;====================================Build Grid=================================
+buildGrid proc uses eax edx ecx
+mov ecx, gxg
+mov edx, offset Tblocks
+loop1:
+	mov eax, gxg
+	loop2:			
+		mov bl, '-'
+		mov [edx], bl
+		add edx, 4
+		dec eax
+		cmp eax, 0
+		je outLoop
+		jmp loop2
+	outLoop:
+	sub edx,3
+	mov bx, 0d0aH
+	mov [edx], bx
+	inc edx
+loop loop1
+call getWords
+
+ret
+buildGrid endp
+
+;===========================Generate Random==============================
+GRand proc uses ebx edx   
+mov   ebx, eax  ; maximum value   
+mov   eax, 343FDh   
+imul  seed   
+add   eax, 269EC3h   
+mov   seed, eax     ; save the seed for the next call   
+ror   eax,8         ; rotate out the lowest digit   
+mov   edx,0   
+div   ebx   ; divide by max value   
+mov   eax, edx  ; return the remainder  
+ret 
+GRand endp 
+
+
+;===========================GetWords/FindWords/toWholeWord/RandomShuffle==============================
+getWords proc uses ecx esi eax ebp ebx
+mov ecx, lengthof WordNo
+mov ebx, offset WordNo
+mov ebp, offset pickWords
+getLoops:
+	push ecx
+	push ebx
+	again:
+	mov eax, 480
+	call GRand
+	mov ecx, lengthof WordNo
+	mov ebx, offset WordNo
+	loop2:
+		mov esi, [ebx]
+		add ebx, 4
+		cmp eax, esi
+		je again
+	loop loop2
+	pop ebx
+	pop ecx
+	mov [ebx], eax
+	call FindWords
+	mov [ebp], esi
+	add ebx, 4
+	add ebp, 4
+loop getLoops
+
+push offset wholeWords
+call toWholeWord
+add esp, 4
+call shuffleSort
+call SelWordDir
+ret
+getWords endp
+
+findWords proc uses ebx edx
+mov esi, offset buffer
+mov edx, 0
+mov bl, 0ah
+Dowhile:
+	mov bh, [esi]
+	inc esi
+	cmp bh, bl
+	jne Dowhile
+	inc edx
+cmp eax, edx
+jne DoWhile
+
+ret
+findWords endp
+
+toWholeWord proc uses esi edx ecx ebx
+mov esi, offset pickWords
+mov edx, [esp+20]
+mov ecx, lengthof WordNo
+loop1:
+	mov eax, [esi]
+	doWhile:
+		mov bl, [eax]
+		cmp bl, 0dH
+		je notadd
+		cmp bl, 0aH
+		je notadd
+		and bl, 11011111b
+		
+		notadd:
+		mov [edx], bl
+		inc eax
+		inc edx
+		cmp bl, 0aH
+		jne doWhile
+	add esi, 4
+loop loop1
+ret
+toWholeWord endp
+
+shuffleSort proc uses esi ecx eax ebx edx
+mov esi, offset PickWords
+mov ecx, lengthof PickWords
+dec ecx
+looprev:
+	mov eax, ecx
+	call Grand
+	shl eax, 2
+	add eax, esi
+	mov ebx, eax
+
+	mov edx, ecx
+	shl edx, 2
+	add edx, esi
+	mov ebp, [edx]
+	mov edi, [ebx]
+	mov [ebx], ebp
+	mov [edx], edi
+loop looprev
+ret
+shuffleSort endp
+
+;===========================SelWordDirec/ChooseWord/HideWords==============================
+SelWordDir Proc uses eax esi edx ebx ecx
+mov esi, offset pickWords
+mov eax, 0
+mov ebx, 0
+SIX:
+	call ChooseDir		
+	mov edx, [esi]
+	push edx				;word
+	push eax				;Direction No
+	call hideWords
+	add esp, 8
+	add esi, 4
+	inc ebx
+	cmp ebx, 6				;6 Directions
+	jne Six
+
+mov ecx, 2
+anotherTwo:					;Not A DjKhalid Refernece
+	mov eax, 6
+	Call GRand
+	mov ebx, eax
+	call ChooseDir
+	mov edx, [esi]
+	push edx				;word
+	push eax				;Direction No
+	call hideWords
+	add esp, 8
+	add esi, 4
+loop anotherTwo				;AnotherOne
+
+call writeLetters
+
+ret
+SelWordDir endp
+
+ChooseDir proc
+cmp ebx, 0
+	jne direc1
+	mov eax, 58
+	jmp done
+	direc1:
+		cmp ebx, 1
+		jne direc2
+		mov eax, 4
+		jmp done
+		direc2:
+			cmp ebx, 2
+			jne direc3
+			mov eax, 62
+			jmp done
+			direc3:
+				cmp ebx, 3
+				jne direc4
+				mov eax, -58
+				jmp done
+				direc4:
+					cmp ebx, 4
+					jne direc5
+					mov eax, 54
+					jmp done
+					direc5:
+						mov eax, -4
+	Done:
+ret
+ChooseDir endp
+
+
+HideWords proc uses eax ebx ecx edx esi ebp
+mov ebp, [esp+28]			;DirectionNo
+mov esi, [esp+32]			;Word
+mov eax, esi
+mov edi, 0
+countLetters:
+	mov bl, [eax]
+	inc eax
+	inc edi
+	cmp bl, 0dh
+	jne countLetters
+dec edi
+Again:
+	mov edx, offset Tblocks
+	mov eax, lengthof Tblocks
+	call GRand
+	mov bl, [edx+eax]
+	cmp bl, '-'
+	jne Again
+
+	add edx, eax
+	mov ebx, edx
+	mov location, ebx
+	mov ecx, 0
+	ifLoop:
+		mov dl, [ebx]
+		add ebx, ebp
+		cmp dl, 0
+		je again
+		cmp dl, '-'
+		je notCheck
+		mov dh, [esi+ecx]
+		and dh, 11011111b
+		cmp dl, dh								;If at ebx there is similiar a Char
+		jne Again
+
+	notCheck:
+	mov edx, offset TBlocks						
+	cmp ebp, 0									;IF ebp(Direction) is backwards (Neg)
+	jl signed
+	add edx, lengthof TBlocks
+	cmp ebx, edx								;Checks if ebx is Ahead of Grid
+	ja Again
+	jmp jumped
+	Signed:
+		cmp ebx, edx							;Checks if ebx is behind Grid
+		jl Again
+jumped:
+inc ecx
+cmp ecx, edi
+jb ifLoop
+mov ebx, Location
+mov ecx, edi
+write:
+	mov dl, [esi]
+	inc esi
+	and dl, 11011111b
+	mov [ebx], dl
+	add ebx, ebp
+loop write
+ret
+HideWords endp
+
+writeLetters proc uses esi ecx edx eax ebx
+mov esi, offset TBlocks
+mov ecx, lengthof TBlocks
+WriteIndue:
+	mov edx, offset abc
+	mov eax, 26
+	call GRand
+	mov bl, [eax+edx]
+	mov bh, [esi]
+	cmp bh, '-'
+	jne donot
+	mov [esi], bl
+	donot:
+	inc esi
+loop WriteIndue
+ret
+writeLetters endp
+
+;==============================StartGame=========================================
+StartGame proc uses ebx eax ecx
+
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 11
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+
+mov ebx, 28
+rol ebx, 16
+mov bx, 0
+
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset msg3, lengthof msg3, offset x, 0
+
+EightMin:
+cmp endTime, 600000
+jge exit
+cmp Done?, 8
+je exit
+
+mov ecx, 50
+mov esi, offset buffer
+mov bl, 0
+clearbuff:
+	mov [esi], bl
+	inc esi
+loop clearbuff
+
+mov ecx, lengthof theWord
+mov edi, offset theWord
+clearword:
+	mov [edi], bl
+	inc edi
+loop clearword
+
+mov direction, 0
+mov colNo, 0
+mov rowNo, 0
+
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 4
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+
+mov ebx, 28
+rol ebx, 16
+mov bx, 82
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -10
+invoke ReadConsoleA, EAX, offset buffer, lengthof buffer, offset x, 0
+
+call splitAnswer
+call FindWord
+
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 10
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+
+mov ebx, 2
+rol ebx, 16
+mov bx, 66
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+call adjustScore
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset byteScore, lengthof byteScore, offset x, 0
+
+mov ebx, 0
+mov bl, 0
+shl bl, 4
+or bl, 7
+invoke GetStdHandle, -11
+invoke SetConsoleTextAttribute, eax, ebx
+
+mov ebx, 28
+rol ebx, 16
+mov bx, 82
+invoke GetStdHandle, -11
+invoke SetConsoleCursorPosition, eax, ebx
+invoke GetStdHandle, -11
+invoke WriteConsoleA, EAX, offset empSpaces, lengthof empSpaces, offset x, 0
+
+
+invoke GetTickCount
+mov endTime, eax
+mov ecx, startTime
+sub endTime, ecx
+jmp EightMin
+
+Exit:
+ret
+StartGame endp
+
+splitAnswer proc uses esi ebx edx eax ecx
+mov esi, offset buffer
+mov ebx, offset theWord
+mov edx, 0
+writeToword:
+	mov al, [esi]
+	cmp al, 20h
+	je writeEnd
+	cmp al, 97
+	jl noadd
+	and al, 11011111b
+	noadd:
+	mov [ebx], al
+	inc esi
+	inc ebx
+jmp writeToword
+
+writeEnd:
+inc esi
+mov ebx, offset rowNo
+mov eax, 0
+mov ebp, 10
+
+ridSpaces:
+	mov cl, [esi]
+	cmp cl, 20h
+	jne writeToRow
+	inc esi
+jmp ridSpaces
+
+writeToRow:
+	mov cl, [esi]
+	cmp cl, 20h
+	je writeEnd1
+	sub cl, '0'
+	mul ebp
+	movzx edx, cl
+	add eax, edx
+	inc esi
+jmp writeToRow
+
+writeEnd1:
+mov [ebx], al
+
+ridSpaces2:
+	mov cl, [esi]
+	cmp cl, 20h
+	jne jmphere
+	inc esi
+jmp ridSpaces2
+
+jmphere:
+mov ebx, offset colNo
+mov eax, 0
+mov ebp, 10
+writeToCol:
+	mov cl, [esi]
+	cmp cl, 20h
+	je writeEnd2
+	sub cl, '0'
+	mul ebp
+	movzx edx, cl
+	add eax, edx
+	inc esi
+jmp writeToCol
+
+writeEnd2:
+mov [ebx], al
+
+ridSpaces3:
+	mov cl, [esi]
+	cmp cl, 20h
+	jne jmphere2
+	inc esi
+jmp ridSpaces3
+
+jmphere2:
+mov ebx, offset Direction
+mov eax, 0
+mov ebp, 10
+writeToDir:
+	mov cl, [esi]
+	cmp cl, 0dh
+	je end1
+	sub cl, '0'
+	mul ebp
+	movzx edx, cl
+	add eax, edx
+	inc esi
+jmp writeToDir
+
+end1:
+	mov [ebx], al
+ret
+splitAnswer endp
+
+FindWord proc
+mov eax, lengthof TBlocks
+dec eax
+cdq
+div GxG
+mov edx, offset TBlocks
+mul rowNo
+add edx, eax
+
+mov eax, 3
+mul colNo
+movzx ebx, colNO
+add eax, ebx
+add edx, eax
+
+mov edi, offset theWord
+mov ecx, 0
+orgLength:
+	mov bl, [edi]
+	inc ecx
+	inc edi
+	cmp bl, 0
+	jne orgLength
+dec ecx
+push offset foundList
+push offset theWord
+call substrr
+pop esi
+pop esi
+cmp eax, 1
+je NoSuchWord
+
+push offset wholeWords   	  ;orgstr
+push offset theWord			  ;substring
+call substrr
+pop esi
+pop esi
+cmp eax, 1
+jne NoSuchWord
+
+movzx ebx, Direction
+call ChooseDir
+mov esi, offset theWord
+mov edi, ecx
+CheckAtLocation:
+	mov bl, [edx]
+	mov bh, [esi]
+	inc esi
+	add edx, eax
+	cmp bl, bh
+	jne butWrong
+loop CheckAtLocation
+mov ecx, edi
+call Highlight
+add score, 10
+call highlightTop
+
+mov eax, offset FoundList
+mov esi, offset theWord
+mov ebx, offsetList
+writeList:
+	mov dl, [esi]
+	mov [eax+ebx],dl
+	inc esi
+	inc ebx
+loop writeList
+inc Done?
+mov offsetList, ebx
+jmp NoSuchWord
+butWrong:
+sub score, 10
+NoSuchWord:
+ret
+FindWord endp
+
+highlightTop proc uses ecx eax ebx edx edi ebp
+add ebp, 3
+mov esi, offset theWord
+mov edi, 0
+infLoop:
+	cmp ecx, 0
+	je exit
+	push ecx
+	mov ebx, 0
+	mov bl, 7
+	shl bl, 4
+	or bl, 4
+
+	invoke GetStdHandle, -11
+	invoke SetConsoleTextAttribute, eax, ebx
+
+	mov ebx, ebp
+	rol ebx, 16
+	mov bx, di
+	inc di
+
+	invoke GetStdHandle, -11
+	invoke SetConsoleCursorPosition, eax, ebx
+
+	mov dl, [esi]
+	mov char, dl
+	inc esi
+
+	invoke GetStdHandle, -11
+	invoke WriteConsoleA, EAX, offset char, lengthof char, offset x, 0
+	
+	pop ecx
+	dec ecx
+jmp infLoop
+exit:
+
+ret
+highlightTop endp
+
+substrr PROC uses edx esi ecx ebx
+	mov	ebx, [esp+20]			  ;substring
+	mov esi, [esp+24]   	  ;orgstr
+	mov edx, 0
+	mov eax, 0
+	mov edi, ecx
+	mov ecx, 0
+	mov ebp, 0
+	l1:
+		cmp eax, edi
+		je succ
+		mov cl, [esi]
+		cmp cl, 0
+		je outt
+		mov ch, [ebx+edx]
+		cmp ch, cl
+		jne l11
+		mov ch, [ebx+edx+1]
+		inc esi
+		inc edx
+		inc eax
+		jmp l1
+		l11:
+			cmp edx, 0
+			jna l12
+			mov edx, 0
+			mov eax, 0
+			cmp cl, 0dh
+			je l13
+			jmp l1
+		l12:
+			inc esi
+			cmp cl, 0dh
+			je l13
+			jmp l1
+		l13:
+			inc ebp
+			jmp l1
+	succ:
+		mov eax, 1
+	outt:
+ ret
+substrr ENDP
+
+
+Highlight proc uses edi ecx ebx eax edx
+movzx ebx, colNo
+mov edi, ebx
+shl edi, 2
+
+mov esi, offset theWord
+infLoop:
+	cmp ecx, 0
+	je exit
+	push ecx
+	mov ebx, 0
+	mov bl, 4
+	shl bl, 4
+	or bl, 0
+
+	invoke GetStdHandle, -11
+	invoke SetConsoleTextAttribute, eax, ebx
+
+	cmp Direction, 1
+	jne l1
+		push eax
+		movzx ax, rowNo
+		mov ebx, 12
+		add bx, ax
+		rol ebx, 16
+		mov bx, di
+		add di, 4
+		pop eax
+	l1:
+	cmp Direction, 5
+	jne l2
+		push eax
+		movzx ax, rowNo
+		mov ebx, 12
+		add bx, ax
+		rol ebx, 16
+		mov bx, di
+		sub di, 4
+		pop eax
+	l2:
+	cmp Direction, 3
+	jne l3
+		push eax
+		movzx ax, rowNo
+		mov ebx, 12
+		add bx, ax
+		rol ebx, 16
+		mov bx, di
+		dec rowNo
+		pop eax
+	l3:
+	cmp Direction, 0
+	jne l4
+		push eax
+		movzx ax, rowNo
+		mov ebx, 12
+		add bx, ax
+		rol ebx, 16
+		mov bx, di
+		inc rowNo
+		pop eax
+	l4:
+	cmp Direction, 2
+	jne l5
+		push eax
+		movzx ax, rowNo
+		mov ebx, 12
+		add bx, ax
+		rol ebx, 16
+		mov bx, di
+		inc rowNo
+		add di, 4
+		pop eax
+	l5:
+		cmp Direction, 4
+		jne l6
+		push eax
+		movzx ax, rowNo
+		mov ebx, 12
+		add bx, ax
+		rol ebx, 16
+		mov bx, di
+		inc rowNo
+		sub di, 4
+		pop eax
+	l6:
+	invoke GetStdHandle, -11
+	invoke SetConsoleCursorPosition, eax, ebx
+
+	mov dl, [esi]
+	mov char, dl
+	inc esi
+
+	invoke GetStdHandle, -11
+	invoke WriteConsoleA, EAX, offset char, lengthof char, offset x, 0
+	
+	pop ecx
+	dec ecx
+jmp infLoop
+exit:
+
+ret
+Highlight endp
+
+adjustScore proc
+mov esi, offset bytescore
+mov ecx, lengthof bytescore
+loo:
+mov al,0
+mov [esi],al
+inc esi
+loop loo
+dec esi
+mov eax, '0'
+mov [esi],al
+mov edx,0
+mov ax, word ptr score
+cmp ax, 0
+jnl convertTobyte
+mov bx, -1
+imul bx
+convertTobyte:
+mov dx,0
+cmp ax,10
+jl converted
+mov bx,10
+div bx
+add dx, 48
+mov [esi],dl
+dec esi
+jmp convertTobyte
+
+converted:
+add al, 48
+mov [esi],al
+dec esi
+cmp score, 0
+jnl donotAddsign
+mov al,'-'
+mov [esi],al
+donotAddsign:
+
+ret
+adjustScore endp
+
+end main
